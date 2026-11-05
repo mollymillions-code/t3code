@@ -104,6 +104,9 @@ vi.mock("../components/Sidebar.snooze", () => ({
   ],
   snoozeWakeDescription: () => "later",
 }));
+vi.mock("./useChatPaneCommands", () => ({
+  useChatPaneCommands: () => ({ splitFromThread: async () => recordEffect("split") }),
+}));
 vi.mock("./useCopyToClipboard", () => ({
   useCopyToClipboard: () => ({ copyToClipboard: () => recordEffect("copy") }),
 }));

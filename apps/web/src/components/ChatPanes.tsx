@@ -36,12 +36,14 @@ import { SidebarInset } from "./ui/sidebar";
 
 /** Below this, a pane's composer controls overflow; matches the preview panel's sibling column. */
 const CHAT_PANE_MIN_WIDTH = 360;
+/** Below this, a stacked pane has no room for its header, a few messages and the composer. */
+const CHAT_PANE_MIN_HEIGHT = 300;
 /** Room for the chat column and the right panel beside it at their 360px minimums. */
 const CHAT_PANE_INLINE_RIGHT_PANEL_MIN_WIDTH = 720;
 const KEYBOARD_FOCUS = "keyboard";
 
 /**
- * One thread, or two side by side. The route shows the focused pane, so focusing a pane navigates
+ * One thread, or two side by side or stacked. The route shows the focused pane, so focusing a pane navigates
  * to it; with one pane this is the plain thread view.
  */
 export function ChatPanes({
@@ -59,10 +61,16 @@ export function ChatPanes({
     useShallow((store) => panes.map((pane) => paneThreadKey(pane.target, store))),
   );
   const splitOpen = isChatSplitOpen(layout);
-  // Too narrow for two panes: only the focused one renders, and the split returns with room.
-  const [fitsSplit, setFitsSplit] = useState(true);
+  const stacked = layout.direction === "down";
+  // Too small for two panes: only the focused one renders, and the split returns with room.
+  const [fitsSideBySide, setFitsSideBySide] = useState(true);
+  const [fitsStacked, setFitsStacked] = useState(true);
+  const fitsSplit = stacked ? fitsStacked : fitsSideBySide;
   const observeContainer = (container: HTMLDivElement) => {
-    const measure = () => setFitsSplit(container.clientWidth >= CHAT_PANE_MIN_WIDTH * 2 + 1);
+    const measure = () => {
+      setFitsSideBySide(container.clientWidth >= CHAT_PANE_MIN_WIDTH * 2 + 1);
+      setFitsStacked(container.clientHeight >= CHAT_PANE_MIN_HEIGHT * 2 + 1);
+    };
     measure();
     return observeResize(container, measure);
   };
@@ -122,21 +130,29 @@ export function ChatPanes({
       inert={background}
       data-background-thread-view={background || undefined}
     >
-      <div ref={observeContainer} className="flex min-h-0 min-w-0 flex-1 flex-row">
+      <div
+        ref={observeContainer}
+        className={cn("flex min-h-0 min-w-0 flex-1", stacked ? "flex-col" : "flex-row")}
+      >
         {panes.map((pane, index) => {
           if (!fitsSplit && !pane.active) return null;
           const alone = !splitOpen || !fitsSplit;
           return (
             <Fragment key={pane.id}>
               {index > 0 && !alone ? (
-                <div aria-hidden className="h-full w-px shrink-0 bg-border" />
+                <div
+                  aria-hidden
+                  className={cn("shrink-0 bg-border", stacked ? "h-px w-full" : "h-full w-px")}
+                />
               ) : null}
               <ChatPane
                 pane={pane}
                 inSplit={splitOpen}
                 alone={alone}
+                stacked={stacked}
+                // Window chrome sits along the top edge, so only the top pane reserves room for it.
                 first={alone || index === 0}
-                last={alone || index === panes.length - 1}
+                last={alone || (stacked ? index === 0 : index === panes.length - 1)}
                 background={background}
                 onFocus={() => focusPane(pane.target)}
                 focusIntentRef={focusIntentRef}
@@ -190,6 +206,7 @@ function ChatPane({
   pane,
   inSplit,
   alone,
+  stacked,
   first,
   last,
   background,
@@ -204,9 +221,11 @@ function ChatPane({
   inSplit: boolean;
   /** The only pane rendered, outside a split or because the window cannot fit it. */
   alone: boolean;
-  /** Touches the window's left edge. */
+  /** Split down: the panes sit one above the other. */
+  stacked: boolean;
+  /** Touches the window's top-left corner. */
   first: boolean;
-  /** Touches the window's right edge. */
+  /** Touches the window's top-right corner. */
   last: boolean;
   background: boolean;
   hostsHiddenTerminals: boolean;
@@ -251,7 +270,8 @@ function ChatPane({
       className={cn(
         "relative flex min-h-0 min-w-0 flex-1 basis-0 flex-col",
         // Layout containment anchors the header's fixed title bar controls to this pane.
-        !alone && "min-w-90 [contain:layout]",
+        !alone && "[contain:layout]",
+        !alone && (stacked ? "min-h-75" : "min-w-90"),
         !alone &&
           !passive &&
           "before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:z-30 before:h-0.5 before:bg-primary/60",

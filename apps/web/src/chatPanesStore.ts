@@ -10,11 +10,15 @@ export interface ChatPane {
   readonly target: ThreadRouteTarget;
 }
 
+export type ChatSplitDirection = "right" | "down";
+
 /**
  * Two panes means split. The route always shows the focused pane's thread, so a pane's stored
  * target is what it shows while unfocused and what focusing it navigates to.
  */
 export interface ChatPanesLayout {
+  /** Right puts the second pane beside the first; down puts it below. */
+  readonly direction: ChatSplitDirection;
   readonly panes: ReadonlyArray<ChatPane>;
   readonly activePaneId: string | null;
 }
@@ -23,12 +27,16 @@ export interface ResolvedChatPane extends ChatPane {
   readonly active: boolean;
 }
 
-export const SINGLE_CHAT_PANE_LAYOUT: ChatPanesLayout = { panes: [], activePaneId: null };
+export const SINGLE_CHAT_PANE_LAYOUT: ChatPanesLayout = {
+  direction: "right",
+  panes: [],
+  activePaneId: null,
+};
 
 /** The one pane's id before any split; a split keeps it for the routed pane, so it stays mounted. */
 const PRIMARY_CHAT_PANE_ID = "primary";
 
-function chatPaneTargetKey(target: ThreadRouteTarget): string {
+export function chatPaneTargetKey(target: ThreadRouteTarget): string {
   return target.kind === "server" ? scopedThreadKey(target.threadRef) : `draft:${target.draftId}`;
 }
 
@@ -88,6 +96,7 @@ export function commitChatPanes(
     );
   if (unchanged) return layout;
   return {
+    direction: layout.direction,
     panes: resolved.map(({ id, target }) => ({ id, target })),
     activePaneId: active.id,
   };
@@ -102,16 +111,21 @@ export function openChatSplit(
   input: {
     readonly routeTarget: ThreadRouteTarget;
     readonly target: ThreadRouteTarget;
+    readonly direction?: ChatSplitDirection;
     readonly createPaneId: () => string;
   },
 ): ChatPanesLayout {
+  const direction = input.direction ?? "right";
   const targetKey = chatPaneTargetKey(input.target);
   const current = commitChatPanes(layout, input.routeTarget);
-  if (current.panes.some((pane) => chatPaneTargetKey(pane.target) === targetKey)) return current;
+  if (current.panes.some((pane) => chatPaneTargetKey(pane.target) === targetKey)) {
+    return current.direction === direction ? current : { ...current, direction };
+  }
   if (chatPaneTargetKey(input.routeTarget) === targetKey) return current;
   if (!isChatSplitOpen(current)) {
     const activePaneId = current.panes[0]?.id ?? PRIMARY_CHAT_PANE_ID;
     return {
+      direction,
       panes: [
         { id: activePaneId, target: input.routeTarget },
         { id: input.createPaneId(), target: input.target },
@@ -121,6 +135,7 @@ export function openChatSplit(
   }
   return {
     ...current,
+    direction,
     panes: current.panes.map((pane) =>
       pane.id === current.activePaneId ? pane : { id: pane.id, target: input.target },
     ),
@@ -141,7 +156,7 @@ export function closeChatPane(
   const activePaneId = closedActive ? (panes[0]?.id ?? null) : layout.activePaneId;
   const focusTarget = closedActive ? (panes[0]?.target ?? null) : null;
   // The remaining pane keeps its id, so it stays mounted as the single pane.
-  return { layout: { panes, activePaneId }, focusTarget };
+  return { layout: { ...layout, panes, activePaneId }, focusTarget };
 }
 
 interface ChatPanesStoreState {
@@ -150,6 +165,7 @@ interface ChatPanesStoreState {
   readonly openSplit: (input: {
     readonly routeTarget: ThreadRouteTarget;
     readonly target: ThreadRouteTarget;
+    readonly direction: ChatSplitDirection;
   }) => void;
   /** Returns the thread to navigate to when the focused pane closed. */
   readonly closePane: (paneId: string) => ThreadRouteTarget | null;

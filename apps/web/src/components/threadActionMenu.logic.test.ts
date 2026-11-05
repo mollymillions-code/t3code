@@ -32,7 +32,8 @@ describe("buildThreadActionMenuItems", () => {
       const items = buildThreadActionMenuItems({
         ...baseState,
         canOperate: false,
-        canOpenInSplit: true,
+        canSplit: true,
+        canReplaceWithNew: true,
         isPinned: reversed,
         isSettled: reversed,
         isSnoozed: reversed,
@@ -59,7 +60,11 @@ describe("buildThreadActionMenuItems", () => {
             "delete",
           ];
       expect(items.filter((item) => item.disabled).map((item) => item.id)).toEqual(expected);
-      expect(items.some((item) => item.id === "open-in-split")).toBe(true);
+      expect(items.find((item) => item.id === "split")?.children?.map((item) => item.id)).toEqual([
+        "split:right",
+        "split:down",
+        "split:replace-new",
+      ]);
       expect(
         items.find((item) => item.id === "snooze")?.children?.every((child) => child.disabled) ??
           true,

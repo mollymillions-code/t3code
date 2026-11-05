@@ -43,6 +43,7 @@ import {
 } from "@t3tools/client-runtime/state/project-grouping";
 import { buildPhysicalToLogicalProjectKeyMap } from "../sidebarProjectGrouping";
 import { threadRuntimeCanArchive } from "@t3tools/client-runtime/state/models";
+import { useChatPaneCommands } from "./useChatPaneCommands";
 import { useCopyToClipboard } from "./useCopyToClipboard";
 import { useNewThreadHandler } from "./useHandleNewThread";
 import { useClientSettings } from "./useSettings";
@@ -92,6 +93,7 @@ export function useThreadActionMenu(input: {
     reportFailure: false,
   });
   const handleNewThread = useNewThreadHandler();
+  const { splitFromThread } = useChatPaneCommands();
   const confirmThreadDelete = useClientSettings((s) => s.confirmThreadDelete);
   const confirmThreadArchive = useClientSettings((s) => s.confirmThreadArchive);
   const timestampFormat = useClientSettings((s) => s.timestampFormat);
@@ -149,6 +151,9 @@ export function useThreadActionMenu(input: {
         snoozePresets,
         canShareWithGuest,
         canTurnIntoProject: canTurnThreadIntoProject(threadRef),
+        // This menu belongs to an open thread's header.
+        canSplit: true,
+        canReplaceWithNew: true,
       });
       const clicked = await settlePromise(() => api.contextMenu.show(items, position));
       if (clicked._tag === "Failure" || clicked.value === null) return;
@@ -190,6 +195,17 @@ export function useThreadActionMenu(input: {
         }
       };
       switch (action) {
+        case "split:right":
+        case "split:down":
+          await splitFromThread(
+            threadRef,
+            action === "split:right" ? "right" : "down",
+            handleNewThread,
+          );
+          return;
+        case "split:replace-new":
+          await handleNewThread(scopeProjectRef(thread.environmentId, thread.projectId));
+          return;
         case "find":
           onFind?.(threadRef);
           return;

@@ -93,18 +93,29 @@ describe("chat panes", () => {
         createPaneId: paneIds(),
       }),
     ).toBe(layout);
+    // Splitting down with the thread already shown only turns the split.
+    expect(
+      openChatSplit(layout, {
+        routeTarget: thread("a"),
+        target: thread("b"),
+        direction: "down",
+        createPaneId: paneIds(),
+      }),
+    ).toEqual({ ...layout, direction: "down" });
   });
 
   it("replaces the unfocused pane when the split is full", () => {
     const layout = openChatSplit(split(thread("a"), thread("b")), {
       routeTarget: thread("a"),
       target: thread("c"),
+      direction: "down",
       createPaneId: paneIds(),
     });
     expect(shown(layout, thread("a"))).toEqual([
       { id: "primary", target: "a", active: true },
       { id: "pane-1", target: "c", active: false },
     ]);
+    expect(layout.direction).toBe("down");
   });
 
   it("closing the unfocused pane returns to one pane without moving the route", () => {

@@ -1,8 +1,14 @@
-import { scopedThreadKey } from "@t3tools/client-runtime/environment";
-import type { ScopedThreadRef } from "@t3tools/contracts";
+import { scopedThreadKey, scopeProjectRef } from "@t3tools/client-runtime/environment";
+import type { ScopedProjectRef, ScopedThreadRef } from "@t3tools/contracts";
 import { type AnyRouter, useRouter } from "@tanstack/react-router";
 
-import { isChatSplitOpen, useChatPanesStore } from "../chatPanesStore";
+import {
+  chatPaneTargetKey,
+  isChatSplitOpen,
+  useChatPanesStore,
+  type ChatSplitDirection,
+} from "../chatPanesStore";
+import { readThreadShell } from "../state/entities";
 import {
   buildDraftThreadRouteParams,
   buildThreadRouteParams,
@@ -26,13 +32,44 @@ export function createChatPaneCommands(router: AnyRouter) {
           params: buildDraftThreadRouteParams(target.draftId),
         }));
 
+  const readRouteTarget = () => resolveThreadRouteTarget(router.state.matches.at(-1)?.params ?? {});
+
   /** Opens `threadRef` beside the routed thread and focuses it; false with no thread routed. */
-  const openInSplit = (threadRef: ScopedThreadRef): boolean => {
-    const routeTarget = resolveThreadRouteTarget(router.state.matches.at(-1)?.params ?? {});
+  const openInSplit = (threadRef: ScopedThreadRef, direction: ChatSplitDirection): boolean => {
+    const routeTarget = readRouteTarget();
     if (routeTarget === null) return false;
-    useChatPanesStore.getState().openSplit({ routeTarget, target: { kind: "server", threadRef } });
+    useChatPanesStore
+      .getState()
+      .openSplit({ routeTarget, target: { kind: "server", threadRef }, direction });
     navigateTo({ kind: "server", threadRef });
     return true;
+  };
+
+  /**
+   * Splits from a thread's menu. The routed thread splits off a new thread in its project;
+   * any other thread opens beside the routed one.
+   */
+  const splitFromThread = async (
+    threadRef: ScopedThreadRef,
+    direction: ChatSplitDirection,
+    newThread: (projectRef: ScopedProjectRef) => Promise<unknown>,
+  ): Promise<void> => {
+    const routeTarget = readRouteTarget();
+    if (routeTarget === null) return;
+    const routed =
+      routeTarget.kind === "server" &&
+      scopedThreadKey(routeTarget.threadRef) === scopedThreadKey(threadRef);
+    if (!routed) {
+      openInSplit(threadRef, direction);
+      return;
+    }
+    const thread = readThreadShell(threadRef);
+    if (!thread) return;
+    // Creating the thread navigates to it, which the split then shows beside the original.
+    await newThread(scopeProjectRef(thread.environmentId, thread.projectId));
+    const created = readRouteTarget();
+    if (created === null || chatPaneTargetKey(created) === chatPaneTargetKey(routeTarget)) return;
+    useChatPanesStore.getState().openSplit({ routeTarget, target: created, direction });
   };
 
   /**
@@ -53,7 +90,7 @@ export function createChatPaneCommands(router: AnyRouter) {
     return focusTarget !== null;
   };
 
-  return { openInSplit, closePaneShowing };
+  return { openInSplit, splitFromThread, closePaneShowing };
 }
 
 export function useChatPaneCommands() {

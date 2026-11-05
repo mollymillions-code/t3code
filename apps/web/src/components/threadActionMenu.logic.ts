@@ -2,7 +2,10 @@ import type { ContextMenuItem } from "@t3tools/contracts";
 import type { SnoozePreset } from "@t3tools/client-runtime/state/thread-settled";
 
 export type ThreadActionMenuId =
-  | "open-in-split"
+  | "split"
+  | "split:right"
+  | "split:down"
+  | "split:replace-new"
   | "find"
   | "new-thread-on-branch"
   | "filter-by-project"
@@ -96,14 +99,19 @@ export interface ThreadActionMenuState {
   readonly canShareWithGuest?: boolean;
   /** A No project thread with its own folder, on a server that can promote it. */
   readonly canTurnIntoProject?: boolean;
-  /** Another thread is open, so this one can show beside it. */
-  readonly canOpenInSplit?: boolean;
+  /** A thread is open, so this one can split beside it. */
+  readonly canSplit?: boolean;
+  /** This is the open thread, so its pane can swap to a new thread. */
+  readonly canReplaceWithNew?: boolean;
 }
 
 /** Local navigation, read markers, and copying remain available to read-only clients. */
 export function threadActionRequiresOperate(action: ThreadActionMenuId): boolean {
   return ![
-    "open-in-split",
+    "split",
+    "split:right",
+    "split:down",
+    "split:replace-new",
     "find",
     "new-thread-on-branch",
     "project-settings",
@@ -121,11 +129,24 @@ export function buildThreadActionMenuItems(
   state: ThreadActionMenuState,
 ): ReadonlyArray<ContextMenuItem<ThreadActionMenuId>> {
   const items: ReadonlyArray<ContextMenuItem<ThreadActionMenuId>> = [
-    ...(state.canOpenInSplit
-      ? [{ id: "open-in-split" as const, label: "Open in split", icon: "columns-2" }]
-      : []),
     ...(state.canFind
       ? [{ id: "find" as const, label: "Find in thread", icon: "text-search" }]
+      : []),
+    ...(state.canSplit
+      ? [
+          {
+            id: "split" as const,
+            label: "Split",
+            icon: "columns-2",
+            children: [
+              { id: "split:right" as const, label: "Split right" },
+              { id: "split:down" as const, label: "Split down" },
+              ...(state.canReplaceWithNew
+                ? [{ id: "split:replace-new" as const, label: "Replace with new" }]
+                : []),
+            ],
+          },
+        ]
       : []),
     ...(state.branch
       ? [
