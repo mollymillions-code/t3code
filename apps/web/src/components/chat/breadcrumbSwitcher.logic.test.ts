@@ -1,11 +1,13 @@
-import { EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
+import { EnvironmentId, ProjectId, ProviderInstanceId, ThreadId } from "@t3tools/contracts";
 import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { threadKey } from "@t3tools/client-runtime/state/entities";
 import { describe, expect, it } from "vite-plus/test";
 import {
   buildThreadSwitcherThreads,
+  groupThreadSwitcherThreads,
   resolveProjectSwitchTarget,
   type BreadcrumbSwitcherThread,
+  type SectionedSwitcherThread,
 } from "./breadcrumbSwitcher.logic";
 
 function makeThread(
@@ -144,6 +146,63 @@ describe("buildThreadSwitcherThreads", () => {
         currentThreadRef: null,
       }),
     ).toEqual([firstPin, secondPin, newer, fallback, older]);
+  });
+});
+
+describe("groupThreadSwitcherThreads", () => {
+  const now = "2026-01-02T00:00:00.000Z";
+  const sectioned = (
+    id: string,
+    overrides: Partial<SectionedSwitcherThread> = {},
+  ): SectionedSwitcherThread => ({
+    ...makeThread(id),
+    settledOverride: null,
+    snoozedUntil: null,
+    hasPendingApprovals: false,
+    hasPendingUserInput: false,
+    hasActionableProposedPlan: false,
+    pendingSubagentRequest: null,
+    interactionMode: "default",
+    latestRun: null,
+    runtime: null,
+    ...overrides,
+  });
+
+  it("splits threads into the sidebar's sections and keeps each section's order", () => {
+    const pinned = sectioned("pinned", { pinnedAt: now });
+    const settledPin = sectioned("settled-pin", { pinnedAt: now, settledOverride: "settled" });
+    const snoozed = sectioned("snoozed", { snoozedUntil: "2026-01-03T00:00:00.000Z" });
+    const working = sectioned("working", {
+      runtime: {
+        status: "running",
+        activeRunId: null,
+        providerInstanceId: ProviderInstanceId.make("codex"),
+        providerName: null,
+        lastError: null,
+        updatedAt: now,
+      },
+    });
+    const first = sectioned("first");
+    const second = sectioned("second");
+    const threads = [settledPin, first, working, pinned, snoozed, second];
+
+    expect(groupThreadSwitcherThreads(threads, { now, workingShelfEnabled: true })).toEqual([
+      { section: "pinned", threads: [pinned] },
+      { section: "active", threads: [first, second] },
+      { section: "working", threads: [working] },
+      { section: "snoozed", threads: [snoozed] },
+      { section: "settled", threads: [settledPin] },
+    ]);
+    expect(groupThreadSwitcherThreads(threads, { now, workingShelfEnabled: false })[1]).toEqual({
+      section: "active",
+      threads: [first, working, second],
+    });
+    expect(
+      groupThreadSwitcherThreads(threads, { now, workingShelfEnabled: true, limit: 2 }),
+    ).toEqual([
+      { section: "pinned", threads: [pinned] },
+      { section: "active", threads: [first] },
+    ]);
   });
 });
 

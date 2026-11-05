@@ -7,10 +7,16 @@ import type { SidebarThreadSortOrder } from "@t3tools/contracts/settings";
 import { scopedProjectKey, scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { threadKey } from "@t3tools/client-runtime/state/entities";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
+import { isThreadWorking } from "@t3tools/client-runtime/state/thread-inbox";
+import {
+  effectiveSnoozed,
+  type ThreadSnoozeShell,
+} from "@t3tools/client-runtime/state/thread-settled";
 import {
   sortPinnedThreadsByOrderKey,
   sortThreads,
 } from "@t3tools/client-runtime/state/thread-sort";
+import { resolveSidebarThreadSection, type SidebarSection } from "../Sidebar.logic";
 
 export type BreadcrumbSwitcherThread = Pick<
   EnvironmentThreadShell,
@@ -60,6 +66,54 @@ export function buildThreadSwitcherThreads<T extends BreadcrumbSwitcherThread>(
     (thread.pinnedAt !== null ? pinned : rest).push(thread);
   }
   return [...sortPinnedThreadsByOrderKey(pinned), ...sortThreads(rest, input.sortOrder)];
+}
+
+export type SectionedSwitcherThread = BreadcrumbSwitcherThread &
+  ThreadSnoozeShell &
+  Parameters<typeof isThreadWorking>[0] &
+  Pick<EnvironmentThreadShell, "settledOverride">;
+
+const SECTION_ORDER: ReadonlyArray<SidebarSection> = [
+  "pinned",
+  "active",
+  "working",
+  "snoozed",
+  "settled",
+];
+
+/**
+ * Splits switcher threads into the sidebar's sections, in its order; each keeps its incoming
+ * order. `limit` caps the total rows, filling earlier sections first.
+ */
+export function groupThreadSwitcherThreads<T extends SectionedSwitcherThread>(
+  threads: ReadonlyArray<T>,
+  options: {
+    readonly now: string;
+    readonly workingShelfEnabled: boolean;
+    readonly limit?: number;
+  },
+): Array<{ readonly section: SidebarSection; readonly threads: T[] }> {
+  const bySection = new Map(SECTION_ORDER.map((section) => [section, [] as T[]]));
+  for (const thread of threads) {
+    const section = resolveSidebarThreadSection({
+      snoozed: effectiveSnoozed(thread, { now: options.now }),
+      settled: thread.settledOverride === "settled",
+      pinned: thread.pinnedAt !== null,
+    });
+    const shelved =
+      section === "active" && options.workingShelfEnabled && isThreadWorking(thread)
+        ? "working"
+        : section;
+    bySection.get(shelved)?.push(thread);
+  }
+  let remaining = options.limit ?? Number.POSITIVE_INFINITY;
+  const groups: Array<{ readonly section: SidebarSection; readonly threads: T[] }> = [];
+  for (const section of SECTION_ORDER) {
+    const sectionThreads = (bySection.get(section) ?? []).slice(0, remaining);
+    remaining -= sectionThreads.length;
+    if (sectionThreads.length > 0) groups.push({ section, threads: sectionThreads });
+  }
+  return groups;
 }
 
 export type ProjectSwitchTarget =

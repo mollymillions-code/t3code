@@ -14,9 +14,10 @@ import { threadKey } from "@t3tools/client-runtime/state/entities";
 import { pickableProjectGroups } from "@t3tools/client-runtime/state/project-grouping";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import type { OlderSettledScope } from "@t3tools/client-runtime/state/threads";
-import { EllipsisIcon, PinIcon, PlusIcon } from "lucide-react";
-import { useRef, useState, type ReactElement, type ReactNode } from "react";
+import { EllipsisIcon, PlusIcon } from "lucide-react";
+import { Fragment, useRef, useState, type ReactElement, type ReactNode } from "react";
 import { useNewThreadHandler } from "~/hooks/useHandleNewThread";
+import { useNowMinute } from "~/hooks/useNowMinute";
 import { useSidebarProjectGroups } from "~/hooks/useSidebarProjectGroups";
 import { buildSidebarProjectPickerEntries } from "~/sidebarProjectGrouping";
 import {
@@ -31,6 +32,8 @@ import { useClientSettings } from "../../hooks/useSettings";
 import { ProjectFavicon } from "../ProjectFavicon";
 import {
   Menu,
+  MenuGroup,
+  MenuGroupLabel,
   MenuItem,
   MenuPopup,
   MenuRadioGroup,
@@ -39,10 +42,22 @@ import {
   MenuSeparator,
   MenuTrigger,
 } from "../ui/menu";
-import { buildThreadSwitcherThreads, resolveProjectSwitchTarget } from "./breadcrumbSwitcher.logic";
+import type { SidebarSection } from "../Sidebar.logic";
+import {
+  buildThreadSwitcherThreads,
+  groupThreadSwitcherThreads,
+  resolveProjectSwitchTarget,
+} from "./breadcrumbSwitcher.logic";
 
 const PROJECT_ROW_CAP = 50;
 const THREAD_ROW_CAP = 50;
+const SECTION_LABELS: Record<SidebarSection, string> = {
+  pinned: "Pinned",
+  active: "Active",
+  working: "Working",
+  snoozed: "Snoozed",
+  settled: "Settled",
+};
 
 function olderSettledScopes(refs: ReadonlyArray<ScopedProjectRef>): OlderSettledScope[] {
   const byEnvironment = new Map<EnvironmentId, ProjectId[]>();
@@ -238,6 +253,8 @@ function ThreadSwitcherContent(props: {
   const threads = useThreadShellsForProjectRefs(projectRefs);
   const hiddenThreadKeys = useHiddenThreadKeys();
   const sortOrder = useClientSettings((settings) => settings.sidebarThreadSortOrder);
+  const workingShelfEnabled = useClientSettings((settings) => settings.sidebarWorkingShelfEnabled);
+  const now = useNowMinute();
   const router = useRouter();
   const normalizedQuery = query.toLowerCase();
   const activeThreadKey = threadKey(props.activeThreadRef);
@@ -264,9 +281,26 @@ function ThreadSwitcherContent(props: {
     listed.filter((thread) => thread.settledOverride === "settled"),
   );
   const matches = listed.filter((thread) => thread.title.toLowerCase().includes(normalizedQuery));
-  const visible = matches.slice(0, THREAD_ROW_CAP);
+  const sections = groupThreadSwitcherThreads(matches, {
+    now,
+    workingShelfEnabled,
+    limit: THREAD_ROW_CAP,
+  });
+  const visibleCount = sections.reduce((total, group) => total + group.threads.length, 0);
   const moreCount =
-    matches.length - visible.length + (query === "" ? olderSettledShelf.unloadedCount(threads) : 0);
+    matches.length - visibleCount + (query === "" ? olderSettledShelf.unloadedCount(threads) : 0);
+  const selectThread = (value: string) => {
+    props.onOpenChange(false);
+    if (value === activeThreadKey) return;
+    const thread = matches.find(
+      (candidate) => threadKey(scopeThreadRef(candidate.environmentId, candidate.id)) === value,
+    );
+    if (!thread) return;
+    void router.navigate({
+      to: "/$environmentId/$threadId",
+      params: buildThreadRouteParams(scopeThreadRef(thread.environmentId, thread.id)),
+    });
+  };
   return (
     <>
       <MenuSearchInput
@@ -290,38 +324,26 @@ function ThreadSwitcherContent(props: {
           <MenuSeparator />
         </>
       ) : null}
-      <MenuRadioGroup
-        value={activeThreadKey}
-        onValueChange={(value) => {
-          props.onOpenChange(false);
-          if (value === activeThreadKey) return;
-          const thread = matches.find(
-            (candidate) =>
-              threadKey(scopeThreadRef(candidate.environmentId, candidate.id)) === value,
-          );
-          if (!thread) return;
-          void router.navigate({
-            to: "/$environmentId/$threadId",
-            params: buildThreadRouteParams(scopeThreadRef(thread.environmentId, thread.id)),
-          });
-        }}
-      >
-        {visible.map((thread) => {
-          const key = threadKey(scopeThreadRef(thread.environmentId, thread.id));
-          return (
-            <MenuRadioItem key={key} value={key}>
-              <span className="flex min-w-0 items-center gap-2">
-                {thread.pinnedAt !== null ? (
-                  <PinIcon aria-hidden className="size-3.5 shrink-0" />
-                ) : null}
-                <span className="min-w-0 flex-1 truncate" dir={textDirection(thread.title)}>
-                  {thread.title}
-                </span>
-              </span>
-            </MenuRadioItem>
-          );
-        })}
-      </MenuRadioGroup>
+      {sections.map(({ section, threads: sectionThreads }, index) => (
+        <Fragment key={section}>
+          {index > 0 ? <MenuSeparator /> : null}
+          <MenuGroup>
+            <MenuGroupLabel>{SECTION_LABELS[section]}</MenuGroupLabel>
+            <MenuRadioGroup value={activeThreadKey} onValueChange={selectThread}>
+              {sectionThreads.map((thread) => {
+                const key = threadKey(scopeThreadRef(thread.environmentId, thread.id));
+                return (
+                  <MenuRadioItem key={key} value={key}>
+                    <span className="min-w-0 flex-1 truncate" dir={textDirection(thread.title)}>
+                      {thread.title}
+                    </span>
+                  </MenuRadioItem>
+                );
+              })}
+            </MenuRadioGroup>
+          </MenuGroup>
+        </Fragment>
+      ))}
       {olderSettledShelf.loading ? (
         <MenuItem disabled>Loading older threads...</MenuItem>
       ) : moreCount > 0 ? (
