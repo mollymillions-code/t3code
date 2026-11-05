@@ -10,7 +10,7 @@ import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
-import { ChevronDownIcon } from "lucide-react";
+import { ChevronDownIcon, PlusIcon } from "lucide-react";
 import {
   memo,
   useEffect,
@@ -20,6 +20,7 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from "react";
 import { Badge } from "../ui/badge";
+import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { toastManager } from "../ui/toast";
 import { useThreadActionMenu } from "~/hooks/useThreadActionMenu";
@@ -29,6 +30,8 @@ import { canShareWithGuestAtom } from "./guestShareAvailability";
 import { useAtomValue } from "@effect/atom-react";
 import { useOrchestrationCommand } from "../../state/use-orchestration-command";
 import { readEnvironmentScope, useEnvironmentScope } from "../../state/session";
+import { primaryServerKeybindingsAtom } from "../../state/server";
+import { shortcutLabelForCommand } from "../../keybindings";
 import { ProjectFavicon } from "../ProjectFavicon";
 import {
   WorkspaceBreadcrumb,
@@ -94,6 +97,10 @@ export const ChatHeader = memo(function ChatHeader({
     AuthOrchestrationOperateScope,
   );
   const canShareWithGuest = useAtomValue(canShareWithGuestAtom(activeThreadEnvironmentId));
+  const newThreadShortcutLabel = shortcutLabelForCommand(
+    useAtomValue(primaryServerKeybindingsAtom),
+    "chat.newLocal",
+  );
   const updateThreadMetadata = useOrchestrationCommand(threadEnvironment.updateMetadata, {
     reportFailure: false,
   });
@@ -417,6 +424,27 @@ export const ChatHeader = memo(function ChatHeader({
               <TooltipPopup side="top">{activeThreadTitle}</TooltipPopup>
             </Tooltip>
           )}
+          {renamingTitle === null ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant="ghost-muted"
+                    size="icon-xs"
+                    aria-label="New thread in this project"
+                    className="ms-1 shrink-0"
+                    onClick={onNewThreadInProject}
+                  />
+                }
+              >
+                <PlusIcon />
+              </TooltipTrigger>
+              <TooltipPopup side="top">
+                {newThreadShortcutLabel ? `New thread (${newThreadShortcutLabel})` : "New thread"}
+              </TooltipPopup>
+            </Tooltip>
+          ) : null}
           {renamingTitle === null && activeThreadLinkOrigin ? (
             <Tooltip>
               <TooltipTrigger render={<Badge variant="info" size="sm" />}>
