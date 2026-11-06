@@ -37,6 +37,7 @@ import { resolveDraftHeroState } from "./ChatView.logic";
 import { useQueuedRunEdit } from "./chat/useQueuedRunEdit";
 import { recallCheckoutIsRepo, rememberCheckoutIsRepo } from "./ChatView.logic";
 import { useLogicalProjectEnvironments } from "../hooks/useLogicalProjectEnvironments";
+import { useChatPaneCommands } from "../hooks/useChatPaneCommands";
 import { useStableCallback } from "../hooks/useStableCallback";
 import { useProjectScriptEditing } from "./chat/useProjectScriptEditing";
 import { RightPanelSurfaceContent } from "./chat/RightPanelSurfaceContent";
@@ -277,6 +278,7 @@ import { ProviderSubagentBar } from "./chat/ProviderSubagentBar";
 import { getTriggerDisplayModelName } from "./chat/providerIconUtils";
 import { resolveScrollToEndClearance } from "./composerFooterLayout";
 import { ChatHeader } from "./chat/ChatHeader";
+import { ChatThreadTabs } from "./chat/ChatThreadTabs";
 import { useSideChat } from "./chat/useSideChat";
 import { useRemoteOpenState } from "~/remoteOpen";
 import { shouldShowOpenInPicker } from "./chat/OpenInPicker.logic";
@@ -338,7 +340,6 @@ import {
   resolveComposerProviderSelection,
   resolveThreadMetadataUpdateForNextTurn,
   resolveSendEnvMode,
-  startNewThreadForProject,
   codexArtifactTemplatePromptToAppend,
   shouldRefocusComposerOnWindowFocus,
 } from "./ChatView.logic";
@@ -1110,8 +1111,9 @@ export default function ChatView(props: ChatViewProps) {
     !isServerThread && draftFallback
       ? draftFallback.selection
       : activeProjectSettings.settings.defaultModelSelection;
+  const { newThreadInTab } = useChatPaneCommands();
   const handleNewThreadInActiveProject = () => {
-    startNewThreadForProject(activeProjectRef, handleNewThread);
+    if (activeProjectRef) void newThreadInTab(activeProjectRef, handleNewThread);
   };
   const handleNewThreadInActiveProjectStable = useStableCallback(handleNewThreadInActiveProject);
   const projectGroupingSettings = selectProjectGroupingSettings(settings);
@@ -3358,6 +3360,9 @@ export default function ChatView(props: ChatViewProps) {
               {...(threadFindEnabled ? { onFindInThread: openThreadFindStable } : {})}
             />
           </header>
+        )}
+        {embedded || backgroundThread ? null : (
+          <ChatThreadTabs onNewTab={handleNewThreadInActiveProjectStable} />
         )}
 
         <div className="relative flex min-h-0 min-w-0 flex-1">

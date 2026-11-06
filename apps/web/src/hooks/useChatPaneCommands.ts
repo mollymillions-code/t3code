@@ -8,6 +8,7 @@ import {
   useChatPanesStore,
   type ChatSplitDirection,
 } from "../chatPanesStore";
+import { useChatTabsStore } from "../chatTabsStore";
 import { readThreadShell } from "../state/entities";
 import {
   buildDraftThreadRouteParams,
@@ -72,6 +73,19 @@ export function createChatPaneCommands(router: AnyRouter) {
     useChatPanesStore.getState().openSplit({ routeTarget, target: created, direction });
   };
 
+  /** Starts a thread in a new tab after the routed one, which stays open. */
+  const newThreadInTab = async (
+    projectRef: ScopedProjectRef,
+    newThread: (projectRef: ScopedProjectRef) => Promise<unknown>,
+  ): Promise<void> => {
+    const original = readRouteTarget();
+    await newThread(projectRef);
+    const created = readRouteTarget();
+    if (original !== null && created !== null) {
+      useChatTabsStore.getState().openAfter(original, created);
+    }
+  };
+
   /**
    * Closes the pane showing a thread that is gone. True when that moved focus to the other pane,
    * so the caller skips its own fallback navigation.
@@ -90,7 +104,7 @@ export function createChatPaneCommands(router: AnyRouter) {
     return focusTarget !== null;
   };
 
-  return { openInSplit, splitFromThread, closePaneShowing };
+  return { openInSplit, splitFromThread, newThreadInTab, closePaneShowing };
 }
 
 export function useChatPaneCommands() {

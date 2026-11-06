@@ -12,11 +12,13 @@ import {
 } from "react";
 
 import {
+  chatPaneTargetKey,
   isChatSplitOpen,
   resolveChatPanes,
   useChatPanesStore,
   type ResolvedChatPane,
 } from "../chatPanesStore";
+import { useChatTabsStore } from "../chatTabsStore";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { ComposerHandleContext, useComposerHandleContext } from "../composerHandleContext";
 import { useStableCallback } from "../hooks/useStableCallback";
@@ -74,9 +76,16 @@ export function ChatPanes({
     measure();
     return observeResize(container, measure);
   };
-  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- records the routed thread into the pane layout
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- records the routed thread into the pane layout and tabs
   useEffect(() => {
-    if (!background) useChatPanesStore.getState().commit(routeTarget);
+    if (background) return;
+    const otherPaneKeys = new Set(
+      resolveChatPanes(useChatPanesStore.getState().layout, routeTarget)
+        .filter((pane) => !pane.active)
+        .map((pane) => chatPaneTargetKey(pane.target)),
+    );
+    useChatTabsStore.getState().commit(routeTarget, otherPaneKeys);
+    useChatPanesStore.getState().commit(routeTarget);
   }, [background, routeTarget]);
   const activePaneId = panes.find((pane) => pane.active)?.id ?? null;
   // Which pane the user is moving into: the one pressed last, or any pane after Tab or F6.

@@ -4,6 +4,7 @@ import type { AnyRouter } from "@tanstack/react-router";
 import { stackedThreadToast, toastManager } from "~/components/ui/toast";
 import { isPreviewAvailableFor } from "../browser/previewRuntime";
 import { isCommandPaletteOpen, openCommandPalette } from "../commandPaletteBus";
+import { useChatTabsStore } from "../chatTabsStore";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { dispatchPreviewAction, type PreviewAction } from "../components/preview/previewActionBus";
 import { isAppModalPage } from "../components/sidebar/mainAppLocation";
@@ -96,9 +97,16 @@ export function installChatRouteCommands(router: AnyRouter): () => void {
 
   const startNewLocal: CommandHandler = (event) => {
     claim(event);
+    const original = readRouteTarget();
     // With no current or open project, such as when every project is archived, pick one.
     void startNewThreadFromContext(readThreadContext()).then((started) => {
-      if (!started) openCommandPalette({ open: "new-thread-in" });
+      if (!started) {
+        openCommandPalette({ open: "new-thread-in" });
+        return;
+      }
+      // The new thread opens in its own tab; the one it started from stays open.
+      const created = readRouteTarget();
+      if (original && created) useChatTabsStore.getState().openAfter(original, created);
     });
   };
 

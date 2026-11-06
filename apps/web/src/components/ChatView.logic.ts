@@ -38,7 +38,6 @@ import {
   ProviderDriverKind,
   type ProviderInstanceId,
   type ServerProvider,
-  type ScopedProjectRef,
   type ScopedThreadRef,
   type ThreadContextRecord,
   type EnvironmentContextRecord,
@@ -405,16 +404,6 @@ export function resolveThreadSwitchTimeline<T extends readonly unknown[]>(input:
   }
 
   return input.nextEntries;
-}
-
-export function startNewThreadForProject(
-  projectRef: ScopedProjectRef | null,
-  handleNewThread: (projectRef: ScopedProjectRef) => Promise<unknown>,
-): boolean {
-  if (projectRef === null) return false;
-  void handleNewThread(projectRef);
-
-  return true;
 }
 
 export function resolveThreadMetadataUpdateForNextTurn(input: {

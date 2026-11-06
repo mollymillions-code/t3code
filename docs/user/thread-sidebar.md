@@ -335,6 +335,14 @@ Choose **Close pane** in a pane's header to go back to one thread. Closing a pan
 not stop its thread. When the window is too small for two panes, only the focused one
 shows until there is room again. A split lasts until you close it or reload the app.
 
+## Thread tabs
+
+On web and desktop, **+** next to the thread name, or the new thread shortcut, starts a
+thread in a new tab and keeps the current one open. Once two tabs are open, a tab row
+shows under the header: click a tab to switch, **×** or a middle-click closes it.
+Opening a thread from the sidebar replaces the current tab, and a thread that is already
+open switches to its tab. Tabs come back when you reopen the app.
+
 ## Snooze until later
 
 To change the choices in the snooze menu, open **Settings → Threads → Snooze options**.
