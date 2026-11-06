@@ -31,6 +31,19 @@ export function projectChatTabs(state: ChatTabsState, projectKey: string): Reado
   return state.tabs.filter((tab) => tab.projectKey === projectKey);
 }
 
+/** The threads open as tabs in the project of the tab on screen. */
+export function siblingTabThreadRefs(
+  state: ChatTabsState,
+  routeTarget: ThreadRouteTarget | null,
+): ScopedThreadRef[] {
+  const routeKey = routeTarget === null ? null : chatPaneTargetKey(routeTarget);
+  const projectKey = state.tabs.find((tab) => keyOf(tab) === routeKey)?.projectKey;
+  if (projectKey === undefined) return [];
+  return projectChatTabs(state, projectKey).flatMap((tab) =>
+    tab.target.kind === "server" ? [tab.target.threadRef] : [],
+  );
+}
+
 /**
  * Records the routed thread. An open tab becomes its project's active tab; any other thread
  * replaces that project's active tab, like following a link, unless the tab is still on screen

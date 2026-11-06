@@ -8,15 +8,14 @@ import {
   EMPTY_CHAT_TABS,
   openChatTabAfter,
   projectChatTabs,
+  siblingTabThreadRefs,
   type ChatTabsState,
 } from "./chatTabsStore";
 import { DraftId } from "./composerDraftStore";
 import type { ThreadRouteTarget } from "./threadRoutes";
 
-const thread = (id: string): ThreadRouteTarget => ({
-  kind: "server",
-  threadRef: scopeThreadRef(EnvironmentId.make("env"), ThreadId.make(id)),
-});
+const ref = (id: string) => scopeThreadRef(EnvironmentId.make("env"), ThreadId.make(id));
+const thread = (id: string): ThreadRouteTarget => ({ kind: "server", threadRef: ref(id) });
 const draft = (id: string): ThreadRouteTarget => ({ kind: "draft", draftId: DraftId.make(id) });
 const key = (target: ThreadRouteTarget) =>
   target.kind === "server" ? `env:${target.threadRef.threadId}` : `draft:${target.draftId}`;
@@ -50,6 +49,9 @@ describe("chat tabs", () => {
     expect(names(state)).toEqual(["a", "b"]);
     expect(names(state, "q")).toEqual(["x"]);
     expect(state.activeByProject).toEqual({ p: key(thread("b")), q: key(thread("x")) });
+    expect(siblingTabThreadRefs(state, thread("b"))).toEqual([ref("a"), ref("b")]);
+    expect(siblingTabThreadRefs(state, thread("x"))).toEqual([ref("x")]);
+    expect(siblingTabThreadRefs(state, thread("closed"))).toEqual([]);
   });
 
   it("activates an open tab instead of opening it twice", () => {

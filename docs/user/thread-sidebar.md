@@ -343,7 +343,8 @@ On web and desktop, **+** next to the thread name, or the new thread shortcut, s
 thread in a new tab and keeps the current one open. Each project keeps its own tabs, shown
 in the header after the project name once it has two. Click a tab to switch, and **×** or
 a middle-click closes it. Opening a thread from the sidebar replaces the project's current
-tab, and a thread that is already open switches to its tab. Tabs come back when you reopen
+tab, and a thread that is already open switches to its tab. A collapsed sidebar section or
+folder still lists the open tabs of the project on screen. Tabs come back when you reopen
 the app.
 
 ## Snooze until later

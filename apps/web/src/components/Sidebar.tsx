@@ -255,6 +255,8 @@ import { TooltipProvider } from "./ui/tooltip";
 import { composerDraftHasUserContent, DraftId, useComposerDraftStore } from "../composerDraftStore";
 import { useThreadRouteTarget } from "../hooks/useThreadRouteTarget";
 import { useChatPaneCommands } from "../hooks/useChatPaneCommands";
+import { siblingTabThreadRefs, useChatTabsStore } from "../chatTabsStore";
+import { useShallow } from "zustand/react/shallow";
 import {
   SidebarSearchResultRow,
   SortableThreadRow,
@@ -400,13 +402,12 @@ function resolveDraggedOrders(input: {
   };
 }
 
-function routeThreadOnly(
+function openThreadsOnly(
   threads: readonly EnvironmentThreadShell[],
-  routeThreadKey: string | null,
+  openThreadKeys: ReadonlySet<string>,
 ): readonly EnvironmentThreadShell[] {
-  if (routeThreadKey === null) return EMPTY_THREADS;
-  const routeThread = threads.find((thread) => threadShellKey(thread) === routeThreadKey);
-  return routeThread === undefined ? EMPTY_THREADS : [routeThread];
+  const open = threads.filter((thread) => openThreadKeys.has(threadShellKey(thread)));
+  return open.length === 0 ? EMPTY_THREADS : open;
 }
 
 // Separate hooks cache maps independently of later Sidebar hooks and preserve dnd-kit inputs.
@@ -418,7 +419,8 @@ function useSidebarThreads(input: {
   readonly optimisticDrop: SidebarOptimisticDrop | null;
   readonly threads: readonly EnvironmentThreadShell[];
   readonly delegatedUnderParent: ReadonlySet<string>;
-  readonly routeRowThreadKey: string | null;
+  // The thread on screen and its project's other tabs; collapsed shelves and folders still list them.
+  readonly openRowThreadKeys: ReadonlySet<string>;
   // Set in boring mode: the project groups to fold active threads into, in order.
   readonly folderGroups: readonly SidebarProjectSnapshot[] | null;
   // Keeps folders with no active threads, so a project the user filtered to or pinned can start one.
@@ -432,7 +434,7 @@ function useSidebarThreads(input: {
     optimisticDrop,
     threads,
     delegatedUnderParent,
-    routeRowThreadKey,
+    openRowThreadKeys,
     folderGroups,
     keepEmptyFolders: keepEmpty,
   } = input;
@@ -500,26 +502,21 @@ function useSidebarThreads(input: {
     settledThreads.length + olderSettledShelf.unloadedCount(partition.visibleThreads);
   const visibleSettledThreads = (() => {
     const visible = listedSettledThreads.slice(0, settledVisibleCount);
-    if (
-      routeRowThreadKey !== null &&
-      !visible.some((thread) => threadShellKey(thread) === routeRowThreadKey)
-    ) {
-      const routeThread = settledThreads.find(
-        (thread) => threadShellKey(thread) === routeRowThreadKey,
-      );
-      if (routeThread !== undefined) visible.push(routeThread);
+    const listed = new Set(visible.map(threadShellKey));
+    for (const thread of openThreadsOnly(settledThreads, openRowThreadKeys)) {
+      if (!listed.has(threadShellKey(thread))) visible.push(thread);
     }
     return visible.length === settledThreads.length ? settledThreads : visible;
   })();
   const renderedSettledThreads = settledShelfExpanded
     ? visibleSettledThreads
-    : routeThreadOnly(visibleSettledThreads, routeRowThreadKey);
+    : openThreadsOnly(visibleSettledThreads, openRowThreadKeys);
   const visibleSnoozedThreads = snoozedShelfExpanded
     ? snoozedThreads
-    : routeThreadOnly(snoozedThreads, routeRowThreadKey);
+    : openThreadsOnly(snoozedThreads, openRowThreadKeys);
   const visibleWorkingThreads = workingShelfExpanded
     ? workingThreads
-    : routeThreadOnly(workingThreads, routeRowThreadKey);
+    : openThreadsOnly(workingThreads, openRowThreadKeys);
   const projectFolders =
     folderGroups === null
       ? null
@@ -531,12 +528,12 @@ function useSidebarThreads(input: {
           return {
             group: folder.group,
             collapsed,
-            // A closed folder still shows the open thread, and hints at the rest.
+            // A closed folder still shows the open threads, and hints at the rest.
             threads: collapsed
-              ? routeThreadOnly(folder.threads, routeRowThreadKey)
+              ? openThreadsOnly(folder.threads, openRowThreadKeys)
               : folder.threads,
             hiddenThreads: collapsed
-              ? folder.threads.filter((thread) => threadShellKey(thread) !== routeRowThreadKey)
+              ? folder.threads.filter((thread) => !openRowThreadKeys.has(threadShellKey(thread)))
               : EMPTY_THREADS,
           };
         });
@@ -1099,19 +1096,19 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
           ),
         );
   const threads = useQuietThreadShells();
-  const routeRowThreadKey =
-    routeThreadRef === null
-      ? null
-      : scopedThreadKey(
-          scopeThreadRef(
-            routeThreadRef.environmentId,
-            resolveSidebarRowThreadId(
-              routeThreadRef.threadId,
-              routeThreadRef.environmentId,
-              threads,
-            ),
-          ),
-        );
+  const sidebarRowKey = (ref: ScopedThreadRef) =>
+    scopedThreadKey(
+      scopeThreadRef(
+        ref.environmentId,
+        resolveSidebarRowThreadId(ref.threadId, ref.environmentId, threads),
+      ),
+    );
+  const routeRowThreadKey = routeThreadRef === null ? null : sidebarRowKey(routeThreadRef);
+  const openTabThreadRefs = useChatTabsStore(
+    useShallow((state) => siblingTabThreadRefs(state, routeTarget)),
+  );
+  const openRowThreadKeys = new Set(openTabThreadRefs.map(sidebarRowKey));
+  if (routeRowThreadKey !== null) openRowThreadKeys.add(routeRowThreadKey);
   const isSearchingThreads = threadSearchQuery.trim().length > 0;
 
   // History, the palette and links can open a thread the scope hides or the list
@@ -1332,7 +1329,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     optimisticDrop,
     threads,
     delegatedUnderParent,
-    routeRowThreadKey,
+    openRowThreadKeys,
     folderGroups: boringSidebarEnabled
       ? scopedProjectGroups.length === 0
         ? // An archived project keeps a folder for its active threads, below the rest.
