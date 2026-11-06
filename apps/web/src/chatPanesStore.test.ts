@@ -102,6 +102,15 @@ describe("chat panes", () => {
         createPaneId: paneIds(),
       }),
     ).toEqual({ ...layout, direction: "down" });
+    // So does the routed thread itself, which a split shortcut passes when nothing new opened.
+    expect(
+      openChatSplit(layout, {
+        routeTarget: thread("a"),
+        target: thread("a"),
+        direction: "down",
+        createPaneId: paneIds(),
+      }),
+    ).toEqual({ ...layout, direction: "down" });
   });
 
   it("replaces the unfocused pane when the split is full", () => {

@@ -12,7 +12,9 @@ import { shouldCreateNewThreadInCurrentProject } from "../components/Sidebar.log
 import { createNewThreadHandler, resolveDefaultProjectRef } from "../hooks/useHandleNewThread";
 import { createScratchProjectActions } from "../hooks/useScratchProject";
 import { getClientSettings } from "../hooks/useSettings";
-import { startNewThreadFromContext } from "../lib/chatThreadActions";
+import { resolveThreadActionProjectRef, startNewThreadFromContext } from "../lib/chatThreadActions";
+import { createChatPaneCommands } from "../hooks/useChatPaneCommands";
+import type { ChatSplitDirection } from "../chatPanesStore";
 import { selectProjectGroupingSettings } from "@t3tools/client-runtime/state/project-grouping";
 import { selectActiveRightPanel, useRightPanelStore } from "../rightPanelStore";
 import { appAtomRegistry } from "../rpc/atomRegistry";
@@ -110,6 +112,19 @@ export function installChatRouteCommands(router: AnyRouter): () => void {
     });
   };
 
+  const paneCommands = createChatPaneCommands(router);
+  const splitCommand =
+    (direction: ChatSplitDirection): CommandHandler =>
+    (event) => {
+      const context = readThreadContext();
+      // Only from an open thread; the default project would split off an unrelated thread.
+      if (!context.activeThread && !context.activeDraftThread) return;
+      const projectRef = resolveThreadActionProjectRef(context);
+      if (projectRef === null) return;
+      claim(event);
+      void paneCommands.splitWithNewThread(projectRef, direction, handleNewThread);
+    };
+
   const previewCommand =
     (action: PreviewAction): CommandHandler =>
     (event) => {
@@ -121,6 +136,8 @@ export function installChatRouteCommands(router: AnyRouter): () => void {
   return registerCommands(
     {
       "chat.newLocal": startNewLocal,
+      "thread.splitRight": splitCommand("right"),
+      "thread.splitDown": splitCommand("down"),
       "chat.newWithoutProject": (event) => {
         const { activeThread, activeDraftThread } = readThreadContext();
         const environmentId = scratch.scratchEnvironmentId(

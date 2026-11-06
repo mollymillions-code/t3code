@@ -46,6 +46,25 @@ export function createChatPaneCommands(router: AnyRouter) {
     return true;
   };
 
+  /** Starts a thread in `projectRef` and shows it beside the routed thread. */
+  const splitWithNewThread = async (
+    projectRef: ScopedProjectRef,
+    direction: ChatSplitDirection,
+    newThread: (projectRef: ScopedProjectRef) => Promise<unknown>,
+  ): Promise<void> => {
+    const routeTarget = readRouteTarget();
+    if (routeTarget === null) return;
+    // Creating the thread navigates to it, which the split then shows beside the original.
+    await newThread(projectRef);
+    const created = readRouteTarget();
+    // A project keeps one empty draft, so from it nothing new opens; an open split still turns.
+    const target =
+      created === null || chatPaneTargetKey(created) === chatPaneTargetKey(routeTarget)
+        ? routeTarget
+        : created;
+    useChatPanesStore.getState().openSplit({ routeTarget, target, direction });
+  };
+
   /**
    * Splits from a thread's menu. The routed thread splits off a new thread in its project;
    * any other thread opens beside the routed one.
@@ -66,11 +85,11 @@ export function createChatPaneCommands(router: AnyRouter) {
     }
     const thread = readThreadShell(threadRef);
     if (!thread) return;
-    // Creating the thread navigates to it, which the split then shows beside the original.
-    await newThread(scopeProjectRef(thread.environmentId, thread.projectId));
-    const created = readRouteTarget();
-    if (created === null || chatPaneTargetKey(created) === chatPaneTargetKey(routeTarget)) return;
-    useChatPanesStore.getState().openSplit({ routeTarget, target: created, direction });
+    await splitWithNewThread(
+      scopeProjectRef(thread.environmentId, thread.projectId),
+      direction,
+      newThread,
+    );
   };
 
   /** Starts a thread in a new tab after the routed one, which stays open. */
@@ -104,7 +123,7 @@ export function createChatPaneCommands(router: AnyRouter) {
     return focusTarget !== null;
   };
 
-  return { openInSplit, splitFromThread, newThreadInTab, closePaneShowing };
+  return { openInSplit, splitFromThread, splitWithNewThread, newThreadInTab, closePaneShowing };
 }
 
 export function useChatPaneCommands() {

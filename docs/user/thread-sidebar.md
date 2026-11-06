@@ -324,7 +324,9 @@ Open a thread's menu, from the sidebar or by right-clicking its header, and choo
 **Split → Split right** or **Split down**. On the current thread this starts a new
 thread in the same project beside it; on any other thread it opens that thread beside
 the current one. The new pane takes focus. **Replace with new** swaps the current pane
-to a new thread.
+to a new thread. `mod+D` splits right and `mod+Shift+D` splits down with a new thread
+in the current project; in a focused terminal these keys split the terminal instead.
+The Diff panel toggle is on `mod+Alt+C`.
 
 The focused pane is the one the sidebar and command palette act on. Click into the
 other pane to switch. Opening a thread from the sidebar replaces the focused pane's

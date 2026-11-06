@@ -163,7 +163,7 @@ export const DEFAULT_KEYBINDINGS: ReadonlyArray<KeybindingRule> = [
   { key: "mod+w", command: "terminal.close", when: "terminalFocus" },
   { key: "mod+w", command: "rightPanel.close", when: "!terminalFocus" },
   { key: "mod+shift+t", command: "view.reopenClosed" },
-  { key: "mod+d", command: "diff.toggle", when: "!terminalFocus" },
+  { key: "mod+alt+c", command: "diff.toggle", when: "!terminalFocus" },
   { key: "mod+shift+j", command: "preview.toggle" },
   { key: "mod+r", command: "preview.refresh", when: "previewFocus" },
   { key: "mod+l", command: "preview.focusUrl", when: "previewFocus" },
@@ -218,6 +218,8 @@ export const DEFAULT_KEYBINDINGS: ReadonlyArray<KeybindingRule> = [
   { key: "mod+shift+c", command: "thread.copyReference", when: "!terminalFocus" },
   { key: "mod+shift+s", command: "thread.settle", when: "!terminalFocus" },
   { key: "mod+shift+p", command: "thread.pin", when: "!terminalFocus" },
+  { key: "mod+d", command: "thread.splitRight", when: "!terminalFocus" },
+  { key: "mod+shift+d", command: "thread.splitDown", when: "!terminalFocus" },
   { key: "mod+z", command: "thread.undo", when: "!terminalFocus && !editableFocus" },
   ...THREAD_JUMP_KEYBINDING_COMMANDS.map((command, index) => ({
     key: `mod+${index + 1}`,
