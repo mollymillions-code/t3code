@@ -1,4 +1,9 @@
-import { scopedThreadKey, scopeThreadRef } from "@t3tools/client-runtime/environment";
+import {
+  scopedProjectKey,
+  scopedThreadKey,
+  scopeProjectRef,
+  scopeThreadRef,
+} from "@t3tools/client-runtime/environment";
 import { useNavigate, useRouter } from "@tanstack/react-router";
 import { useShallow } from "zustand/react/shallow";
 import {
@@ -23,6 +28,7 @@ import { useComposerDraftStore } from "../composerDraftStore";
 import { ComposerHandleContext, useComposerHandleContext } from "../composerHandleContext";
 import { useStableCallback } from "../hooks/useStableCallback";
 import { observeResize } from "../lib/observeResize";
+import { useQuietThreadShell } from "../state/entities";
 import { cn } from "../lib/utils";
 import {
   buildDraftThreadRouteParams,
@@ -76,16 +82,9 @@ export function ChatPanes({
     measure();
     return observeResize(container, measure);
   };
-  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- records the routed thread into the pane layout and tabs
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- records the routed thread into the pane layout
   useEffect(() => {
-    if (background) return;
-    const otherPaneKeys = new Set(
-      resolveChatPanes(useChatPanesStore.getState().layout, routeTarget)
-        .filter((pane) => !pane.active)
-        .map((pane) => chatPaneTargetKey(pane.target)),
-    );
-    useChatTabsStore.getState().commit(routeTarget, otherPaneKeys);
-    useChatPanesStore.getState().commit(routeTarget);
+    if (!background) useChatPanesStore.getState().commit(routeTarget);
   }, [background, routeTarget]);
   const activePaneId = panes.find((pane) => pane.active)?.id ?? null;
   // Which pane the user is moving into: the one pressed last, or any pane after Tab or F6.
@@ -139,6 +138,7 @@ export function ChatPanes({
       inert={background}
       data-background-thread-view={background || undefined}
     >
+      {background ? null : <ChatTabsRecorder routeTarget={routeTarget} />}
       <div
         ref={observeContainer}
         className={cn("flex min-h-0 min-w-0 flex-1", stacked ? "flex-col" : "flex-row")}
@@ -181,6 +181,40 @@ export function ChatPanes({
       </div>
     </SidebarInset>
   );
+}
+
+/**
+ * Records the routed thread into its project's tabs. Its own component, so the shell reads that
+ * find the project re-render nothing else.
+ */
+function ChatTabsRecorder({ routeTarget }: { routeTarget: ThreadRouteTarget }) {
+  const serverRef = routeTarget.kind === "server" ? routeTarget.threadRef : null;
+  const shell = useQuietThreadShell(serverRef);
+  // A draft, or a thread the shell does not list yet, still has its draft session.
+  const draftProjectKey = useComposerDraftStore((store) => {
+    const session =
+      routeTarget.kind === "draft"
+        ? store.getDraftSession(routeTarget.draftId)
+        : store.getDraftThreadByRef(routeTarget.threadRef);
+    return session
+      ? scopedProjectKey(scopeProjectRef(session.environmentId, session.projectId))
+      : null;
+  });
+  const projectKey = shell
+    ? scopedProjectKey(scopeProjectRef(shell.environmentId, shell.projectId))
+    : draftProjectKey;
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- records the routed thread into its project's tabs
+  useEffect(() => {
+    if (projectKey === null) return;
+    // Runs before ChatPanes commits the route, so this is the layout the route arrived in.
+    const otherPaneKeys = new Set(
+      resolveChatPanes(useChatPanesStore.getState().layout, routeTarget)
+        .filter((pane) => !pane.active)
+        .map((pane) => chatPaneTargetKey(pane.target)),
+    );
+    useChatTabsStore.getState().commit(routeTarget, projectKey, otherPaneKeys);
+  }, [projectKey, routeTarget]);
+  return null;
 }
 
 function paneThreadKey(

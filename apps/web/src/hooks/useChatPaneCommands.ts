@@ -1,4 +1,8 @@
-import { scopedThreadKey, scopeProjectRef } from "@t3tools/client-runtime/environment";
+import {
+  scopedProjectKey,
+  scopedThreadKey,
+  scopeProjectRef,
+} from "@t3tools/client-runtime/environment";
 import type { ScopedProjectRef, ScopedThreadRef } from "@t3tools/contracts";
 import { type AnyRouter, useRouter } from "@tanstack/react-router";
 
@@ -101,7 +105,7 @@ export function createChatPaneCommands(router: AnyRouter) {
     await newThread(projectRef);
     const created = readRouteTarget();
     if (original !== null && created !== null) {
-      useChatTabsStore.getState().openAfter(original, created);
+      useChatTabsStore.getState().openAfter(original, created, scopedProjectKey(projectRef));
     }
   };
 

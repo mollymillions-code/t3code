@@ -7,6 +7,7 @@ import {
   commitChatTab,
   EMPTY_CHAT_TABS,
   openChatTabAfter,
+  projectChatTabs,
   type ChatTabsState,
 } from "./chatTabsStore";
 import { DraftId } from "./composerDraftStore";
@@ -19,66 +20,81 @@ const thread = (id: string): ThreadRouteTarget => ({
 const draft = (id: string): ThreadRouteTarget => ({ kind: "draft", draftId: DraftId.make(id) });
 const key = (target: ThreadRouteTarget) =>
   target.kind === "server" ? `env:${target.threadRef.threadId}` : `draft:${target.draftId}`;
-
-const names = (state: ChatTabsState) =>
-  state.tabs.map((tab) => (tab.kind === "server" ? tab.threadRef.threadId : tab.draftId));
 const none = new Set<string>();
 
+const names = (state: ChatTabsState, project = "p") =>
+  projectChatTabs(state, project).map(({ target }) =>
+    target.kind === "server" ? target.threadRef.threadId : target.draftId,
+  );
+
+/** Tabs opened one after another in project `p`, the last one active. */
 function tabs(...targets: ThreadRouteTarget[]): ChatTabsState {
   return targets.reduce<ChatTabsState>(
-    (state, target) => openChatTabAfter(state, state.tabs.at(-1) ?? target, target),
-    {
-      ...EMPTY_CHAT_TABS,
-      tabs: targets.slice(0, 1),
-      activeKey: targets[0] ? key(targets[0]) : null,
-    },
+    (state, target) =>
+      state.tabs.length === 0
+        ? commitChatTab(state, target, "p", none)
+        : openChatTabAfter(state, state.tabs.at(-1)!.target, target, "p"),
+    EMPTY_CHAT_TABS,
   );
 }
 
 describe("chat tabs", () => {
-  it("replaces the active tab when the route moves to an unopened thread", () => {
-    const state = commitChatTab(tabs(thread("a"), thread("b")), thread("c"), none);
+  it("replaces the project's active tab when the route moves to an unopened thread", () => {
+    const state = commitChatTab(tabs(thread("a"), thread("b")), thread("c"), "p", none);
     expect(names(state)).toEqual(["a", "c"]);
-    expect(state.activeKey).toBe(key(thread("c")));
+    expect(state.activeByProject.p).toBe(key(thread("c")));
+  });
+
+  it("keeps each project's tabs apart", () => {
+    const state = commitChatTab(tabs(thread("a"), thread("b")), thread("x"), "q", none);
+    expect(names(state)).toEqual(["a", "b"]);
+    expect(names(state, "q")).toEqual(["x"]);
+    expect(state.activeByProject).toEqual({ p: key(thread("b")), q: key(thread("x")) });
   });
 
   it("activates an open tab instead of opening it twice", () => {
-    const state = commitChatTab(tabs(thread("a"), thread("b")), thread("a"), none);
+    const state = commitChatTab(tabs(thread("a"), thread("b")), thread("a"), "p", none);
     expect(names(state)).toEqual(["a", "b"]);
-    expect(state.activeKey).toBe(key(thread("a")));
+    expect(state.activeByProject.p).toBe(key(thread("a")));
   });
 
   it("adds a tab when the active one is still shown in the other split pane", () => {
-    const state = commitChatTab(tabs(thread("a")), thread("b"), new Set([key(thread("a"))]));
+    const state = commitChatTab(tabs(thread("a")), thread("b"), "p", new Set([key(thread("a"))]));
     expect(names(state)).toEqual(["a", "b"]);
   });
 
   it("opens a new thread after the original whether or not the route commit ran first", () => {
     const start = tabs(thread("a"), thread("b"));
     const committedFirst = openChatTabAfter(
-      commitChatTab(start, draft("new"), none),
+      commitChatTab(start, draft("new"), "p", none),
       thread("b"),
       draft("new"),
+      "p",
     );
-    const openedFirst = openChatTabAfter(start, thread("b"), draft("new"));
+    const openedFirst = openChatTabAfter(start, thread("b"), draft("new"), "p");
     expect(names(committedFirst)).toEqual(["a", "b", "new"]);
-    expect(names(commitChatTab(openedFirst, draft("new"), none))).toEqual(["a", "b", "new"]);
-    expect(committedFirst.activeKey).toBe(key(draft("new")));
+    expect(names(commitChatTab(openedFirst, draft("new"), "p", none))).toEqual(["a", "b", "new"]);
+    expect(committedFirst.activeByProject.p).toBe(key(draft("new")));
   });
 
   it("promotes a sent draft in place", () => {
-    const state = commitChatTab(tabs(thread("a"), draft("new")), thread("sent"), none);
+    const state = commitChatTab(tabs(thread("a"), draft("new")), thread("sent"), "p", none);
     expect(names(state)).toEqual(["a", "sent"]);
   });
 
-  it("closing the active tab focuses its right neighbour, else its left one", () => {
-    const start = commitChatTab(tabs(thread("a"), thread("b"), thread("c")), thread("b"), none);
+  it("closing the active tab focuses its right neighbour in the project, else its left one", () => {
+    const start = commitChatTab(
+      commitChatTab(tabs(thread("a"), thread("b"), thread("c")), thread("x"), "q", none),
+      thread("b"),
+      "p",
+      none,
+    );
     const middle = closeChatTab(start, key(thread("b")));
     expect(names(middle.state)).toEqual(["a", "c"]);
     expect(middle.focusTarget).toEqual(thread("c"));
     const last = closeChatTab(middle.state, key(thread("c")));
     expect(last.focusTarget).toEqual(thread("a"));
-    const inactive = closeChatTab(last.state, "env:missing");
-    expect(inactive.focusTarget).toBeNull();
+    expect(names(last.state, "q")).toEqual(["x"]);
+    expect(closeChatTab(last.state, "env:missing").focusTarget).toBeNull();
   });
 });

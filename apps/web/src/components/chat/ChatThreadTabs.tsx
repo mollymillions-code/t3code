@@ -1,8 +1,10 @@
 import { useNavigate } from "@tanstack/react-router";
-import { PlusIcon, XIcon } from "lucide-react";
+import { XIcon } from "lucide-react";
+import type { ReactNode } from "react";
+import { useShallow } from "zustand/react/shallow";
 
 import { chatPaneTargetKey } from "../../chatPanesStore";
-import { useChatTabsStore } from "../../chatTabsStore";
+import { projectChatTabs, useChatTabsStore } from "../../chatTabsStore";
 import { useComposerDraftStore } from "../../composerDraftStore";
 import { cn } from "../../lib/utils";
 import { useQuietThreadShell } from "../../state/entities";
@@ -11,16 +13,21 @@ import {
   buildThreadRouteParams,
   type ThreadRouteTarget,
 } from "../../threadRoutes";
-import { Button } from "../ui/button";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
-/** Open thread tabs. Shown once a second tab is open, so one thread looks as it always did. */
-export function ChatThreadTabs({ onNewTab }: { onNewTab: () => void }) {
-  const tabs = useChatTabsStore((state) => state.tabs);
-  const activeKey = useChatTabsStore((state) => state.activeKey);
+export function useProjectTabCount(projectKey: string | null): number {
+  return useChatTabsStore((state) =>
+    projectKey === null ? 0 : projectChatTabs(state, projectKey).length,
+  );
+}
+
+/**
+ * The project's open threads, in the header after the project name. `active` is the usual thread
+ * crumb, so the active tab keeps its switcher menu and rename.
+ */
+export function ChatHeaderTabs({ projectKey, active }: { projectKey: string; active: ReactNode }) {
+  const tabs = useChatTabsStore(useShallow((state) => projectChatTabs(state, projectKey)));
+  const activeKey = useChatTabsStore((state) => state.activeByProject[projectKey] ?? null);
   const navigate = useNavigate();
-  if (tabs.length < 2) return null;
-
   const open = (target: ThreadRouteTarget) =>
     void (target.kind === "server"
       ? navigate({
@@ -34,52 +41,38 @@ export function ChatThreadTabs({ onNewTab }: { onNewTab: () => void }) {
   };
 
   return (
-    <div
-      role="tablist"
-      aria-label="Open threads"
-      className="flex h-8 shrink-0 items-center gap-0.5 overflow-x-auto border-b border-border px-2"
-    >
-      {tabs.map((target) => {
+    <div role="tablist" aria-label="Open threads" className="flex min-w-0 items-center gap-1">
+      {tabs.map(({ target }) => {
         const key = chatPaneTargetKey(target);
-        return (
+        return key === activeKey ? (
+          <div
+            key={key}
+            role="tab"
+            aria-selected
+            className="flex h-7 min-w-24 shrink items-center gap-1 rounded-md bg-accent ps-2 pe-1"
+          >
+            <div className="flex min-w-0 flex-1 items-center">{active}</div>
+            <TabCloseButton label="Close tab" onClose={() => close(key)} />
+          </div>
+        ) : (
           <ChatThreadTab
             key={key}
             target={target}
-            active={key === activeKey}
             onSelect={() => open(target)}
             onClose={() => close(key)}
           />
         );
       })}
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <Button
-              type="button"
-              variant="ghost-muted"
-              size="icon-xs"
-              aria-label="New tab"
-              className="ms-0.5 shrink-0"
-              onClick={onNewTab}
-            />
-          }
-        >
-          <PlusIcon />
-        </TooltipTrigger>
-        <TooltipPopup side="bottom">New tab</TooltipPopup>
-      </Tooltip>
     </div>
   );
 }
 
 function ChatThreadTab({
   target,
-  active,
   onSelect,
   onClose,
 }: {
   target: ThreadRouteTarget;
-  active: boolean;
   onSelect: () => void;
   onClose: () => void;
 }) {
@@ -91,17 +84,12 @@ function ChatThreadTab({
   if (target.kind === "server" ? shell === null : !draftExists) return null;
   const title = (shell?.title ?? "").trim() || "New thread";
   return (
-    <div
-      className={cn(
-        "group flex h-6 max-w-48 min-w-0 shrink-0 items-center rounded-md text-xs",
-        active ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/50",
-      )}
-    >
+    <div className="group flex h-7 max-w-44 min-w-16 shrink items-center rounded-md text-sm text-muted-foreground hover:bg-accent/50 hover:text-foreground">
       <button
         type="button"
         role="tab"
-        aria-selected={active}
-        className="min-w-0 truncate py-1 ps-2 pe-1 outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-inset rounded-md"
+        aria-selected={false}
+        className="min-w-0 flex-1 truncate rounded-md py-1 ps-2 pe-1 text-left outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-inset"
         onClick={onSelect}
         onAuxClick={(event) => {
           if (event.button === 1) onClose();
@@ -109,17 +97,35 @@ function ChatThreadTab({
       >
         {title}
       </button>
-      <button
-        type="button"
-        aria-label={`Close ${title}`}
-        className={cn(
-          "me-1 flex size-4 shrink-0 items-center justify-center rounded-sm hover:bg-foreground/10",
-          active ? "opacity-70" : "opacity-0 group-hover:opacity-70 focus-visible:opacity-70",
-        )}
-        onClick={onClose}
-      >
-        <XIcon className="size-3" />
-      </button>
+      <TabCloseButton
+        label={`Close ${title}`}
+        className="opacity-0 group-hover:opacity-70 focus-visible:opacity-70"
+        onClose={onClose}
+      />
     </div>
+  );
+}
+
+function TabCloseButton({
+  label,
+  className,
+  onClose,
+}: {
+  label: string;
+  className?: string;
+  onClose: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      className={cn(
+        "me-0.5 flex size-5 shrink-0 items-center justify-center rounded-sm opacity-70 hover:bg-foreground/10 hover:opacity-100",
+        className,
+      )}
+      onClick={onClose}
+    >
+      <XIcon className="size-3.5" />
+    </button>
   );
 }

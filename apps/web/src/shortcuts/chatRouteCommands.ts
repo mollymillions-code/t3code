@@ -1,3 +1,4 @@
+import { scopedProjectKey } from "@t3tools/client-runtime/environment";
 import { AuthPreviewOperateScope, type EnvironmentId } from "@t3tools/contracts";
 import type { AnyRouter } from "@tanstack/react-router";
 
@@ -100,15 +101,19 @@ export function installChatRouteCommands(router: AnyRouter): () => void {
   const startNewLocal: CommandHandler = (event) => {
     claim(event);
     const original = readRouteTarget();
+    const context = readThreadContext();
+    const projectRef = resolveThreadActionProjectRef(context);
     // With no current or open project, such as when every project is archived, pick one.
-    void startNewThreadFromContext(readThreadContext()).then((started) => {
+    void startNewThreadFromContext(context).then((started) => {
       if (!started) {
         openCommandPalette({ open: "new-thread-in" });
         return;
       }
       // The new thread opens in its own tab; the one it started from stays open.
       const created = readRouteTarget();
-      if (original && created) useChatTabsStore.getState().openAfter(original, created);
+      if (original && created && projectRef) {
+        useChatTabsStore.getState().openAfter(original, created, scopedProjectKey(projectRef));
+      }
     });
   };
 
